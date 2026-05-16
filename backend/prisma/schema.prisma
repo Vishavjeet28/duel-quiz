@@ -1,0 +1,70 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String         @id @default(uuid())
+  phone        String         @unique
+  username     String         @unique
+  displayName  String
+  avatarEmoji  String         @default("🦁")
+  language     String         @default("en")
+  isPro        Boolean        @default(false)
+  streakCount  Int            @default(0)
+  totalPoints  Int            @default(0)
+  token        String         @unique
+  createdAt    DateTime       @default(now())
+  
+  quizSessions QuizSession[]
+  wallets      Wallet?
+}
+
+model Question {
+  id                String   @id @default(uuid())
+  questionText      String
+  optionA           String
+  optionB           String
+  optionC           String
+  optionD           String
+  correctOption     String
+  explanation       String
+  difficulty        String
+  category          String
+  aiConfidenceScore Int      @default(0)
+  isApproved        Boolean  @default(true)
+}
+
+model QuizSession {
+  id           String   @id @default(uuid())
+  userId       String
+  totalScore   Int      @default(0)
+  rank         Int      @default(0)
+  totalPlayers Int      @default(0)
+  correctCount Int      @default(0)
+  duelPoints   Int      @default(0)
+  createdAt    DateTime @default(now())
+  
+  user         User     @relation(fields: [userId], references: [id])
+}
+
+model Duel {
+  id          String   @id @default(uuid())
+  initiatorId String
+  opponentId  String
+  category    String
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+}
+
+model Wallet {
+  id         String   @id @default(uuid())
+  userId     String   @unique
+  duelPoints Int      @default(0)
+  
+  user       User     @relation(fields: [userId], references: [id])
+}

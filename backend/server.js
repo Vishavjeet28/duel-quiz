@@ -5,13 +5,7 @@ const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const { PrismaClient } = require('@prisma/client');
 
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: process.env.DATABASE_URL,
-    },
-  },
-});
+const prisma = new PrismaClient();
 
 if (!process.env.DATABASE_URL) {
   console.error("FATAL: DATABASE_URL environment variable is not set!");

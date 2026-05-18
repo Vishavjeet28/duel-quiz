@@ -20,26 +20,22 @@ app.use(express.static('public'));
 const CATEGORIES = ['cricket', 'politics', 'finance', 'science', 'bollywood', 'world'];
 const DAY_CATEGORY = { 1: 'politics', 2: 'cricket', 3: 'finance', 4: 'science', 5: 'bollywood', 6: 'world', 0: 'mixed' };
 
-const QUESTIONS_SEED = [
-  { id: uuidv4(), questionText: 'Who won the ICC Champions Trophy 2025?', optionA: 'India', optionB: 'Australia', optionC: 'England', optionD: 'New Zealand', correctOption: 'A', explanation: 'India won the ICC Champions Trophy 2025.', difficulty: 'easy', category: 'cricket', aiConfidenceScore: 95, isApproved: true },
-  { id: uuidv4(), questionText: 'Which IPL franchise was acquired for the highest price?', optionA: 'Lucknow Super Giants', optionB: 'Gujarat Titans', optionC: 'Mumbai Indians', optionD: 'CSK', correctOption: 'A', explanation: 'LSG was acquired for ₹7,090 crore.', difficulty: 'medium', category: 'cricket', aiConfidenceScore: 90, isApproved: true },
-  { id: uuidv4(), questionText: 'What is the highest individual score in IPL history?', optionA: '175*', optionB: '185*', optionC: '158', optionD: '162', correctOption: 'A', explanation: 'Chris Gayle scored 175* for RCB in 2013.', difficulty: 'medium', category: 'cricket', aiConfidenceScore: 98, isApproved: true },
-  { id: uuidv4(), questionText: 'Which bowler has the most World Cup wickets?', optionA: 'Glenn McGrath', optionB: 'Muralitharan', optionC: 'Starc', optionD: 'Wasim Akram', correctOption: 'A', explanation: 'McGrath holds the record with 71 wickets.', difficulty: 'hard', category: 'cricket', aiConfidenceScore: 97, isApproved: true },
-  { id: uuidv4(), questionText: 'Virat Kohli holds the record for most T20I centuries?', optionA: 'True', optionB: 'False', optionC: 'Tied', optionD: 'Unknown', correctOption: 'A', explanation: 'Kohli has 4 T20I centuries.', difficulty: 'easy', category: 'cricket', aiConfidenceScore: 95, isApproved: true },
-  { id: uuidv4(), questionText: 'The PROG Act 2025 regulates?', optionA: 'Online gaming', optionB: 'Social media', optionC: 'Crypto', optionD: 'Digital payments', correctOption: 'A', explanation: 'PROG Act regulates online real-money games.', difficulty: 'easy', category: 'politics', aiConfidenceScore: 92, isApproved: true },
-  { id: uuidv4(), questionText: 'Current repo rate by RBI (May 2026)?', optionA: '6.00%', optionB: '6.25%', optionC: '6.50%', optionD: '5.75%', correctOption: 'A', explanation: 'RBI maintained repo rate at 6.00%.', difficulty: 'easy', category: 'finance', aiConfidenceScore: 88, isApproved: true },
-  { id: uuidv4(), questionText: 'ISRO landed on which Moon pole?', optionA: 'South Pole', optionB: 'North Pole', optionC: 'Equator', optionD: 'Far side', correctOption: 'A', explanation: 'Chandrayaan-3 landed near the South Pole.', difficulty: 'easy', category: 'science', aiConfidenceScore: 99, isApproved: true },
-  { id: uuidv4(), questionText: 'Stree 2 crossed how much at box office?', optionA: '₹1000 crore', optionB: '₹500 crore', optionC: '₹800 crore', optionD: '₹200 crore', correctOption: 'A', explanation: 'Stree 2 crossed ₹1000 crore globally.', difficulty: 'easy', category: 'bollywood', aiConfidenceScore: 85, isApproved: true },
-  { id: uuidv4(), questionText: 'Which country joined BRICS in Jan 2024?', optionA: 'UAE', optionB: 'Turkey', optionC: 'Argentina', optionD: 'Mexico', correctOption: 'A', explanation: 'UAE joined BRICS from January 2024.', difficulty: 'easy', category: 'world', aiConfidenceScore: 93, isApproved: true },
-];
+const QUESTIONS_SEED = require('./data/questions');
+
 
 async function seedDatabase() {
   const count = await prisma.question.count();
-  if (count === 0) {
-    console.log('Seeding database with questions...');
+  if (count < QUESTIONS_SEED.length) {
+    console.log('Seeding database with new questions...');
     for (const q of QUESTIONS_SEED) {
-      await prisma.question.create({ data: q });
+      const exists = await prisma.question.findFirst({
+        where: { questionText: q.questionText }
+      });
+      if (!exists) {
+        await prisma.question.create({ data: q });
+      }
     }
+    console.log('Database seeding complete.');
   }
 }
 

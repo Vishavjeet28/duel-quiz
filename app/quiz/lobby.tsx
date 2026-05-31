@@ -17,7 +17,7 @@ const TIPS = [
 
 export default function QuizLobbyScreen() {
   const router = useRouter();
-  const { startQuiz } = useQuizStore();
+  const { startQuiz, todayRealPlayerCount, setRealPlayerCount } = useQuizStore();
   const [currentTip, setCurrentTip] = useState(0);
   
   const spinAnim = useRef(new Animated.Value(0)).current;
@@ -68,6 +68,7 @@ export default function QuizLobbyScreen() {
     const fetchQuestions = async () => {
       try {
         const data = await api.get<{ questions: any[], category: string, totalPlayers: number }>('/v1/quiz/today');
+        setRealPlayerCount(data.totalPlayers);
         
         // Wait at least 2.5s for the animation effect
         setTimeout(() => {
@@ -92,6 +93,8 @@ export default function QuizLobbyScreen() {
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
+
+  const displayPlayerCount = todayRealPlayerCount > 0 ? `${todayRealPlayerCount} in this round` : 'Loading...';
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
@@ -123,7 +126,7 @@ export default function QuizLobbyScreen() {
 
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Players</Text>
-          <Text style={styles.infoValue}>👥 312 in this round</Text>
+          <Text style={styles.infoValue}>👥 {displayPlayerCount}</Text>
         </View>
       </View>
 

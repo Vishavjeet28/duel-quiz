@@ -7,14 +7,18 @@ import { useAuthStore } from '../../stores/authStore';
 import { useQuizStore } from '../../stores/quizStore';
 import { useWalletStore } from '../../stores/walletStore';
 import { getUserLevel } from '../../utils/gameLogic';
+import { api } from '../../services/api';
 
 const { width } = Dimensions.get('window');
+
+interface LeaderEntry { rank: number; username: string; score: number; avatar: string; }
 
 export default function HomeScreen() {
   const router = useRouter();
   const user = useAuthStore(s => s.user);
-  const { hasPlayedToday, todayCategory, setTodayCategory, startQuiz } = useQuizStore();
-  const { duelPoints } = useWalletStore();
+  const { hasPlayedToday, todayCategory, setTodayCategory, startQuiz, checkAndLoadPlayedToday, todayRealPlayerCount, setRealPlayerCount } = useQuizStore();
+  const { duelPoints, loadWallet } = useWalletStore();
+  const [topPlayers, setTopPlayers] = useState<LeaderEntry[]>([]);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
@@ -26,7 +30,19 @@ export default function HomeScreen() {
   const [timeLeft, setTimeLeft] = useState('');
   useEffect(() => {
     setTodayCategory(category?.name || 'Mixed');
-    
+    checkAndLoadPlayedToday();
+    loadWallet();
+
+    // Fetch real leaderboard top 3
+    api.get<LeaderEntry[]>('/v1/leaderboard/daily')
+      .then(data => setTopPlayers(data.slice(0, 3)))
+      .catch(() => {}); // Fail silently — show nothing if offline
+
+    // Fetch real player count for today
+    api.get<{ totalPlayers: number; questions: any[]; category: string }>('/v1/quiz/today')
+      .then(data => setRealPlayerCount(data.totalPlayers))
+      .catch(() => {});
+
     const updateTimer = () => {
       const now = new Date();
       const midnight = new Date(now);
@@ -67,12 +83,7 @@ export default function HomeScreen() {
   const level = getUserLevel(user?.totalPoints || 0);
   const streakCount = user?.streakCount || 0;
 
-  // Mock leaderboard data
-  const topPlayers = [
-    { rank: 1, name: 'Arjun_K', score: 11400, avatar: '🦁' },
-    { rank: 2, name: 'Priya_S', score: 10800, avatar: '🦊' },
-    { rank: 3, name: 'Ravi_M', score: 10200, avatar: '🐯' },
-  ];
+  const displayPlayerCount = todayRealPlayerCount > 0 ? todayRealPlayerCount : '—';
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -130,7 +141,7 @@ export default function HomeScreen() {
 
         <View style={styles.metaRow}>
           <Text style={styles.metaText}>🕐 Closes in {timeLeft}</Text>
-          <Text style={styles.metaText}>👥 312 players</Text>
+          <Text style={styles.metaText}>👥 {displayPlayerCount} players</Text>
         </View>
       </View>
 
@@ -164,7 +175,7 @@ export default function HomeScreen() {
           <Text style={styles.modeEmoji}>📰</Text>
           <Text style={styles.modeTitle}>Daily Tournament</Text>
           <Text style={styles.modeDesc}>Prize pool growing</Text>
-          <Text style={styles.modeMeta}>👥 312 players</Text>
+          <Text style={styles.modeMeta}>👥 {displayPlayerCount} players</Text>
         </TouchableOpacity>
         
         <TouchableOpacity style={[styles.modeCard, { borderColor: Colors.secondary }]} onPress={() => router.push('/(tabs)/challenges')}>
@@ -197,16 +208,20 @@ export default function HomeScreen() {
             <Text style={styles.viewAllText}>View All →</Text>
           </TouchableOpacity>
         </View>
-        {topPlayers.map(player => (
-          <View key={player.rank} style={styles.lbRow}>
-            <Text style={styles.lbRank}>
-              {player.rank === 1 ? '🥇' : player.rank === 2 ? '🥈' : '🥉'}
-            </Text>
-            <Text style={styles.lbAvatar}>{player.avatar}</Text>
-            <Text style={styles.lbName}>{player.name}</Text>
-            <Text style={styles.lbScore}>{player.score.toLocaleString()} pts</Text>
-          </View>
-        ))}
+        {topPlayers.length === 0 ? (
+          <Text style={styles.lbEmpty}>Play today to see live rankings!</Text>
+        ) : (
+          topPlayers.map(player => (
+            <View key={player.rank} style={styles.lbRow}>
+              <Text style={styles.lbRank}>
+                {player.rank === 1 ? '🥇' : player.rank === 2 ? '🥈' : '🥉'}
+              </Text>
+              <Text style={styles.lbAvatar}>{player.avatar}</Text>
+              <Text style={styles.lbName}>{player.username}</Text>
+              <Text style={styles.lbScore}>{player.score.toLocaleString()} pts</Text>
+            </View>
+          ))
+        )}
       </View>
 
       {/* Referral Banner */}
@@ -518,6 +533,13 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.sm,
     fontFamily: Typography.fontFamily.bold,
     color: Colors.gold,
+  },
+  lbEmpty: {
+    fontSize: Typography.sizes.sm,
+    fontFamily: Typography.fontFamily.regular,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    paddingVertical: 16,
   },
 
   // Referral Banner

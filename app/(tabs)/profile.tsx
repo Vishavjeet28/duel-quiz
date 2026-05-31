@@ -1,31 +1,46 @@
-// SCR-029 + SCR-031 + SCR-033: Profile, Settings, Referral
-import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Share, Alert } from 'react-native';
+// SCR-029 + SCR-031 + SCR-033: Profile, Settings, Referral — with real stats
+import { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Share, Alert, Clipboard, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors, Typography, BorderRadius } from '../../constants/theme';
 import { useAuthStore } from '../../stores/authStore';
 import { useWalletStore } from '../../stores/walletStore';
 import { getUserLevel } from '../../utils/gameLogic';
+import { api } from '../../services/api';
 
-const BADGES = [
-  { id: '1', name: 'First Quiz', emoji: '🎯', earned: true },
-  { id: '2', name: 'Speed Demon', emoji: '⚡', earned: true },
-  { id: '3', name: 'Week Warrior', emoji: '🗓️', earned: true },
-  { id: '4', name: 'Perfect Score', emoji: '💯', earned: false },
-  { id: '5', name: 'Cricket Expert', emoji: '🏏', earned: false },
-  { id: '6', name: 'Finance Guru', emoji: '💹', earned: false },
-  { id: '7', name: 'Social Butterfly', emoji: '🦋', earned: false },
-  { id: '8', name: 'Unstoppable', emoji: '🔥', earned: false },
-  { id: '9', name: 'Century Legend', emoji: '💎', earned: false },
-  { id: '10', name: 'Champion', emoji: '👑', earned: false },
+interface UserStats {
+  totalMatches: number;
+  wins: number;
+  winRate: number;
+  accuracy: number;
+  maxStreak: number;
+}
+
+interface ReferralInfo {
+  referralCode: string;
+  totalInvited: number;
+  pointsEarned: number;
+}
+
+const DEFAULT_BADGES = [
+  { id: '1', name: 'First Quiz', emoji: '🎯', earned: false },
+  { id: '2', name: 'Speed Demon', emoji: '⚡', earned: false, criteria: 'Score 9000+ in a quiz' },
+  { id: '3', name: 'Week Warrior', emoji: '🗓️', earned: false, criteria: '7-day streak' },
+  { id: '4', name: 'Perfect Score', emoji: '💯', earned: false, criteria: 'Answer all 5 correct' },
+  { id: '5', name: 'Unstoppable', emoji: '🔥', earned: false, criteria: '30-day streak' },
+  { id: '6', name: 'Century Legend', emoji: '💎', earned: false, criteria: '100-day streak' },
 ];
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, logout } = useAuthStore();
   const { duelPoints } = useWalletStore();
-  
+
   const [showSettings, setShowSettings] = useState(false);
+  const [stats, setStats] = useState<UserStats | null>(null);
+  const [referralInfo, setReferralInfo] = useState<ReferralInfo | null>(null);
+  const [badges, setBadges] = useState(DEFAULT_BADGES);
+  const [loadingStats, setLoadingStats] = useState(true);
   const [notifications, setNotifications] = useState({
     dailyQuiz: true,
     streakRisk: true,
@@ -34,12 +49,55 @@ export default function ProfileScreen() {
   });
 
   const level = getUserLevel(user?.totalPoints || 0);
-  const referralCode = `DUEL${user?.username?.toUpperCase().slice(0, 4) || 'USER'}${Math.floor(Math.random() * 1000)}`;
+
+  // Fetch real stats and referral info
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoadingStats(true);
+      try {
+        const [statsData, refData, achievementsData] = await Promise.all([
+          api.get<UserStats>('/v1/users/me/stats'),
+          api.get<ReferralInfo>('/v1/users/my-referrals'),
+          api.get<any[]>('/v1/achievements'),
+        ]);
+        setStats(statsData);
+        setReferralInfo(refData);
+        setBadges(achievementsData.map(a => ({
+          id: a.id,
+          name: a.name,
+          emoji: a.emoji,
+          earned: a.earned,
+          criteria: a.criteria,
+        })));
+      } catch (e) {
+        // Use fallback values if API fails
+        setStats({
+          totalMatches: 0,
+          wins: 0,
+          winRate: 0,
+          accuracy: 0,
+          maxStreak: user?.streakCount || 0,
+        });
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const handleCopyReferral = () => {
+    const code = referralInfo?.referralCode || user?.referralCode || '';
+    if (code) {
+      Clipboard.setString(code);
+      Alert.alert('Copied!', 'Referral code copied to clipboard.');
+    }
+  };
 
   const handleShareReferral = async () => {
+    const code = referralInfo?.referralCode || user?.referralCode || '';
     try {
       await Share.share({
-        message: `Join me on Duel — India's #1 daily quiz challenge! Use my code ${referralCode} and get 500 Duel Points bonus.\n\nDownload: https://duel.app/invite/${referralCode}`,
+        message: `Join me on Duel — India's #1 daily quiz challenge! Use my code ${code} and get 500 Duel Points bonus.\n\nDownload: https://duel.app/invite/${code}`,
       });
     } catch {}
   };
@@ -51,14 +109,28 @@ export default function ProfileScreen() {
     ]);
   };
 
-  // Stats
-  const stats = {
-    matches: 47,
-    winRate: 68,
-    accuracy: 76,
-    maxStreak: user?.streakCount || 12,
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This will permanently delete your account and all data. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            // TODO: Call DELETE /v1/users/me API
+            logout();
+            router.replace('/');
+          },
+        },
+      ]
+    );
   };
 
+  // ─────────────────────────────────────────────
+  // SETTINGS VIEW
+  // ─────────────────────────────────────────────
   if (showSettings) {
     return (
       <View style={styles.container}>
@@ -70,7 +142,6 @@ export default function ProfileScreen() {
             <Text style={styles.title}>⚙️ Settings</Text>
           </View>
 
-          {/* Notifications */}
           <Text style={styles.sectionLabel}>NOTIFICATIONS</Text>
           {[
             { key: 'dailyQuiz', label: 'Daily quiz reminder', icon: '📰' },
@@ -90,57 +161,25 @@ export default function ProfileScreen() {
             </View>
           ))}
 
-          {/* Privacy */}
-          <Text style={styles.sectionLabel}>PRIVACY</Text>
-          {[
-            { label: 'Show profile publicly', icon: '👤' },
-            { label: 'Show on leaderboard', icon: '🏆' },
-            { label: 'Allow friend requests', icon: '👥' },
-          ].map((item, i) => (
-            <View key={i} style={styles.settingRow}>
-              <Text style={styles.settingIcon}>{item.icon}</Text>
-              <Text style={styles.settingLabel}>{item.label}</Text>
-              <Switch
-                value={true}
-                trackColor={{ false: Colors.bgCardLight, true: Colors.primary + '60' }}
-                thumbColor={Colors.primary}
-              />
-            </View>
-          ))}
-
-
-          {/* Account */}
           <Text style={styles.sectionLabel}>ACCOUNT</Text>
-          <TouchableOpacity style={styles.menuItem}>
-            <Text style={styles.menuIcon}>📱</Text>
-            <Text style={styles.menuLabel}>Change phone number</Text>
-            <Text style={styles.menuArrow}>→</Text>
-          </TouchableOpacity>
-
           <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
             <Text style={styles.menuIcon}>🚪</Text>
             <Text style={[styles.menuLabel, { color: Colors.error }]}>Logout</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.menuItem, { borderColor: Colors.error + '30' }]}>
+          <TouchableOpacity style={[styles.menuItem, { borderColor: Colors.error + '30' }]} onPress={handleDeleteAccount}>
             <Text style={styles.menuIcon}>🗑️</Text>
             <Text style={[styles.menuLabel, { color: Colors.error }]}>Delete Account</Text>
           </TouchableOpacity>
 
-          {/* Support */}
           <Text style={styles.sectionLabel}>SUPPORT</Text>
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity style={styles.menuItem} onPress={() => Alert.alert('Help', 'Email us at support@duel.app')}>
             <Text style={styles.menuIcon}>❓</Text>
             <Text style={styles.menuLabel}>Help Center & FAQ</Text>
             <Text style={styles.menuArrow}>→</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity style={styles.menuItem} onPress={() => Alert.alert('Report', 'Email bugs to bugs@duel.app')}>
             <Text style={styles.menuIcon}>🐛</Text>
             <Text style={styles.menuLabel}>Report a Bug</Text>
-            <Text style={styles.menuArrow}>→</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.menuItem}>
-            <Text style={styles.menuIcon}>💬</Text>
-            <Text style={styles.menuLabel}>Contact Support</Text>
             <Text style={styles.menuArrow}>→</Text>
           </TouchableOpacity>
 
@@ -149,12 +188,16 @@ export default function ProfileScreen() {
             Helpline: 1800-599-0019
           </Text>
 
+          <Text style={styles.version}>Duel v1.0.0</Text>
           <View style={{ height: 100 }} />
         </ScrollView>
       </View>
     );
   }
 
+  // ─────────────────────────────────────────────
+  // PROFILE VIEW
+  // ─────────────────────────────────────────────
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -172,41 +215,44 @@ export default function ProfileScreen() {
           </View>
           <Text style={styles.displayName}>{user?.displayName || 'Player'}</Text>
           <Text style={styles.username}>@{user?.username || 'username'}</Text>
-          
           <View style={[styles.levelPill, { backgroundColor: level.color + '20', borderColor: level.color }]}>
             <Text style={[styles.levelTitle, { color: level.color }]}>
               Lv.{level.level} {level.title}
             </Text>
           </View>
-
-
         </View>
 
         {/* Stats Grid */}
-        <View style={styles.statsGrid}>
-          <View style={styles.statBox}>
-            <Text style={styles.statNum}>{stats.matches}</Text>
-            <Text style={styles.statTitle}>Matches</Text>
+        {loadingStats ? (
+          <View style={styles.statsLoading}>
+            <ActivityIndicator color={Colors.primary} />
           </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statNum}>{stats.winRate}%</Text>
-            <Text style={styles.statTitle}>Win Rate</Text>
+        ) : (
+          <View style={styles.statsGrid}>
+            <View style={styles.statBox}>
+              <Text style={styles.statNum}>{stats?.totalMatches ?? 0}</Text>
+              <Text style={styles.statTitle}>Matches</Text>
+            </View>
+            <View style={styles.statBox}>
+              <Text style={styles.statNum}>{stats?.winRate ?? 0}%</Text>
+              <Text style={styles.statTitle}>Win Rate</Text>
+            </View>
+            <View style={styles.statBox}>
+              <Text style={styles.statNum}>{stats?.accuracy ?? 0}%</Text>
+              <Text style={styles.statTitle}>Accuracy</Text>
+            </View>
+            <View style={styles.statBox}>
+              <Text style={styles.statNum}>{stats?.maxStreak ?? user?.streakCount ?? 0}</Text>
+              <Text style={styles.statTitle}>🔥 Streak</Text>
+            </View>
           </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statNum}>{stats.accuracy}%</Text>
-            <Text style={styles.statTitle}>Accuracy</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statNum}>{stats.maxStreak}</Text>
-            <Text style={styles.statTitle}>Max Streak</Text>
-          </View>
-        </View>
+        )}
 
         {/* Achievements */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>🏅 Achievements</Text>
           <View style={styles.badgeGrid}>
-            {BADGES.map(badge => (
+            {badges.map(badge => (
               <View key={badge.id} style={[styles.badgeItem, !badge.earned && styles.badgeLocked]}>
                 <Text style={[styles.badgeEmoji, !badge.earned && { opacity: 0.3 }]}>
                   {badge.emoji}
@@ -228,25 +274,27 @@ export default function ProfileScreen() {
               Earn 500 Duel Points when your friend completes their first quiz!
             </Text>
             <View style={styles.referralCodeBox}>
-              <Text style={styles.referralCode}>{referralCode}</Text>
-              <TouchableOpacity style={styles.copyBtn}>
+              <Text style={styles.referralCode}>
+                {referralInfo?.referralCode || user?.referralCode || '---'}
+              </Text>
+              <TouchableOpacity style={styles.copyBtn} onPress={handleCopyReferral}>
                 <Text style={styles.copyText}>📋 Copy</Text>
               </TouchableOpacity>
             </View>
             <TouchableOpacity style={styles.inviteBtn} onPress={handleShareReferral}>
-              <Text style={styles.inviteBtnText}>📤 Invite via WhatsApp</Text>
+              <Text style={styles.inviteBtnText}>📤 Share via WhatsApp</Text>
             </TouchableOpacity>
             <View style={styles.referralStats}>
               <View style={styles.refStatItem}>
-                <Text style={styles.refStatNum}>3</Text>
+                <Text style={styles.refStatNum}>{referralInfo?.totalInvited ?? 0}</Text>
                 <Text style={styles.refStatLabel}>Invited</Text>
               </View>
               <View style={styles.refStatItem}>
-                <Text style={styles.refStatNum}>2</Text>
+                <Text style={styles.refStatNum}>{referralInfo?.totalInvited ?? 0}</Text>
                 <Text style={styles.refStatLabel}>Joined</Text>
               </View>
               <View style={styles.refStatItem}>
-                <Text style={styles.refStatNum}>1000</Text>
+                <Text style={styles.refStatNum}>{referralInfo?.pointsEarned ?? 0}</Text>
                 <Text style={styles.refStatLabel}>Pts Earned</Text>
               </View>
             </View>
@@ -269,7 +317,6 @@ const styles = StyleSheet.create({
   title: { fontSize: Typography.sizes['2xl'], fontFamily: Typography.fontFamily.black, color: Colors.textPrimary },
   settingsBtn: { fontSize: 24 },
 
-  // Profile Card
   profileCard: {
     alignItems: 'center', paddingVertical: 24, marginHorizontal: 20,
     backgroundColor: Colors.bgCard, borderRadius: BorderRadius.xl, marginTop: 16,
@@ -288,9 +335,8 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.full, borderWidth: 1,
   },
   levelTitle: { fontSize: Typography.sizes.xs, fontFamily: Typography.fontFamily.bold },
-  verifiedBadge: { fontSize: Typography.sizes.xs, fontFamily: Typography.fontFamily.medium, color: Colors.success, marginTop: 8 },
 
-  // Stats
+  statsLoading: { height: 80, justifyContent: 'center', alignItems: 'center' },
   statsGrid: {
     flexDirection: 'row', marginHorizontal: 20, marginTop: 16, gap: 8,
   },
@@ -301,7 +347,6 @@ const styles = StyleSheet.create({
   statNum: { fontSize: Typography.sizes.lg, fontFamily: Typography.fontFamily.black, color: Colors.textPrimary },
   statTitle: { fontSize: 9, fontFamily: Typography.fontFamily.medium, color: Colors.textMuted, marginTop: 4, textTransform: 'uppercase' },
 
-  // Section
   section: { marginHorizontal: 20, marginTop: 24 },
   sectionTitle: { fontSize: Typography.sizes.lg, fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary, marginBottom: 12 },
   badgeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
@@ -314,7 +359,6 @@ const styles = StyleSheet.create({
   badgeName: { fontSize: 9, fontFamily: Typography.fontFamily.medium, color: Colors.textPrimary, textAlign: 'center' },
   lockIcon: { position: 'absolute', top: 4, right: 4, fontSize: 10 },
 
-  // Referral
   referralSection: { marginHorizontal: 20, marginTop: 24 },
   referralCard: {
     backgroundColor: Colors.bgCard, borderRadius: BorderRadius.xl, padding: 20,
@@ -337,7 +381,6 @@ const styles = StyleSheet.create({
   refStatNum: { fontSize: Typography.sizes.lg, fontFamily: Typography.fontFamily.bold, color: Colors.textPrimary },
   refStatLabel: { fontSize: Typography.sizes.xs, fontFamily: Typography.fontFamily.regular, color: Colors.textMuted, marginTop: 2 },
 
-  // Settings
   sectionLabel: {
     fontSize: Typography.sizes.xs, fontFamily: Typography.fontFamily.semiBold, color: Colors.textMuted,
     textTransform: 'uppercase', letterSpacing: 1, marginTop: 24, marginBottom: 12, marginHorizontal: 20,
@@ -359,5 +402,9 @@ const styles = StyleSheet.create({
   disclaimer: {
     fontSize: Typography.sizes.xs, fontFamily: Typography.fontFamily.regular, color: Colors.textMuted,
     textAlign: 'center', marginTop: 24, marginHorizontal: 20, lineHeight: 18,
+  },
+  version: {
+    fontSize: Typography.sizes.xs, fontFamily: Typography.fontFamily.regular, color: Colors.textMuted,
+    textAlign: 'center', marginTop: 8,
   },
 });

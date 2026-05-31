@@ -1,6 +1,6 @@
 // SCR-015: Duel Mode Home — Challenges tab
 import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
 import { Colors, Typography, BorderRadius } from '../../constants/theme';
 import { useAuthStore } from '../../stores/authStore';
 
@@ -27,12 +27,20 @@ export default function ChallengesScreen() {
   const [opponentSearch, setOpponentSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
 
+  const showComingSoonAlert = () => {
+    Alert.alert(
+      '⚔️ 1v1 Duel Arena',
+      'This feature is coming soon in the next update! Play the Daily Tournament in the meantime to boost your rank.',
+      [{ text: 'OK', style: 'default' }]
+    );
+  };
+
   const handleAccept = (id: string) => {
-    // In production: POST /duels/:id/accept
+    showComingSoonAlert();
   };
 
   const handleDecline = (id: string) => {
-    // In production: POST /duels/:id/decline
+    showComingSoonAlert();
   };
 
   const wins = MOCK_HISTORY.filter(d => d.result === 'won').length;
@@ -67,7 +75,7 @@ export default function ChallengesScreen() {
             <Text style={styles.challengeBtnIcon}>🎯</Text>
             <Text style={styles.challengeBtnText}>Challenge a Friend</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.randomBtn}>
+          <TouchableOpacity style={styles.randomBtn} onPress={showComingSoonAlert}>
             <Text style={styles.randomBtnIcon}>🎲</Text>
             <Text style={styles.randomBtnText}>Random</Text>
           </TouchableOpacity>
@@ -207,7 +215,7 @@ export default function ChallengesScreen() {
               </Text>
             </View>
 
-            <TouchableOpacity style={styles.sendBtn}>
+            <TouchableOpacity style={styles.sendBtn} onPress={() => { setShowCreate(false); showComingSoonAlert(); }}>
               <Text style={styles.sendBtnText}>Send Challenge ⚔️</Text>
             </TouchableOpacity>
 

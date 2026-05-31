@@ -12,6 +12,16 @@ services:
           property: connectionString
       - key: PORT
         value: "3001"
+      - key: JWT_SECRET
+        generateValue: true   # Render auto-generates a secure random secret
+      - key: FIREBASE_PROJECT_ID
+        sync: false           # Set manually in Render dashboard after Firebase setup
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+      - key: NODE_ENV
+        value: "production"
 
 databases:
   - name: duel-db

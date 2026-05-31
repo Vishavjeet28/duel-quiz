@@ -8,25 +8,30 @@ datasource db {
 }
 
 model User {
-  id           String         @id @default(uuid())
-  phone        String         @unique
-  username     String         @unique
-  displayName  String
-  avatarEmoji  String         @default("🦁")
-  language     String         @default("en")
-  isPro        Boolean        @default(false)
-  streakCount  Int            @default(0)
-  totalPoints  Int            @default(0)
-  token        String         @unique
-  createdAt    DateTime       @default(now())
-  
-  quizSessions QuizSession[]
-  wallets      Wallet?
+  id            String         @id @default(uuid())
+  uid           String         @unique          // Firebase UID (Google/Apple sub)
+  email         String?
+  username      String         @unique
+  displayName   String         @default("")
+  avatarEmoji   String         @default("🦁")
+  language      String         @default("en")
+  isPro         Boolean        @default(false)
+  proExpiresAt  DateTime?
+  streakCount   Int            @default(0)
+  totalPoints   Int            @default(0)
+  lastPlayedAt  DateTime?                        // For daily streak logic
+  referralCode  String         @unique           // Stable, generated at creation
+  referredBy    String?                          // Referral code of who invited them
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  quizSessions  QuizSession[]
+  wallets       Wallet?
 }
 
 model Question {
   id                String   @id @default(uuid())
-  questionText      String
+  questionText      String   @unique
   optionA           String
   optionB           String
   optionC           String
@@ -37,6 +42,9 @@ model Question {
   category          String
   aiConfidenceScore Int      @default(0)
   isApproved        Boolean  @default(true)
+  createdAt         DateTime @default(now())
+
+  @@index([category, isApproved])
 }
 
 model QuizSession {
@@ -48,8 +56,11 @@ model QuizSession {
   correctCount Int      @default(0)
   duelPoints   Int      @default(0)
   createdAt    DateTime @default(now())
-  
+
   user         User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([createdAt, totalScore])
 }
 
 model Duel {
@@ -57,15 +68,18 @@ model Duel {
   initiatorId String
   opponentId  String
   category    String
-  status      String   @default("pending")
+  status      String   @default("pending")   // pending | accepted | completed | expired
   createdAt   DateTime @default(now())
   expiresAt   DateTime
+
+  @@index([opponentId, status])
 }
 
 model Wallet {
   id         String   @id @default(uuid())
   userId     String   @unique
   duelPoints Int      @default(0)
-  
+  updatedAt  DateTime @updatedAt
+
   user       User     @relation(fields: [userId], references: [id])
 }

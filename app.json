@@ -17,6 +17,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.duel.quiz",
       "buildNumber": "4",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -37,7 +38,8 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      "expo-apple-authentication"
     ],
     "extra": {
       "eas": {

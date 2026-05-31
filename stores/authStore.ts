@@ -1,10 +1,11 @@
-// Auth Store — Manages user authentication state
+// Auth Store — Firebase-backed authentication + session state
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface User {
   id: string;
-  phone: string;
+  uid: string;           // Firebase UID (Google/Apple sub)
+  email: string | null;
   username: string;
   displayName: string;
   avatarEmoji: string;
@@ -14,6 +15,13 @@ export interface User {
   streakCount: number;
   lastPlayedAt: string | null;
   totalPoints: number;
+  referralCode: string;  // Stable, stored in DB
+  quizStats: {
+    totalMatches: number;
+    wins: number;
+    accuracy: number;
+    maxStreak: number;
+  };
   createdAt: string;
 }
 
@@ -23,7 +31,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   isOnboarded: boolean;
-  
+
   // Actions
   setUser: (user: User) => void;
   setToken: (token: string) => void;
@@ -59,8 +67,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: () => {
-    set({ user: null, token: null, isAuthenticated: false });
-    AsyncStorage.multiRemove(['user', 'token']);
+    set({ user: null, token: null, isAuthenticated: false, isOnboarded: false });
+    AsyncStorage.multiRemove(['user', 'token', 'isOnboarded', 'hasPlayedDate']);
   },
 
   updateUser: (updates) => {
@@ -79,7 +87,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   loadFromStorage: async () => {
     try {
-      const [userStr, token, onboarded] = await AsyncStorage.multiGet(['user', 'token', 'isOnboarded']);
+      const [userStr, token, onboarded] = await AsyncStorage.multiGet([
+        'user', 'token', 'isOnboarded',
+      ]);
       const user = userStr[1] ? JSON.parse(userStr[1]) : null;
       set({
         user,

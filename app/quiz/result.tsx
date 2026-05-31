@@ -25,21 +25,19 @@ export default function QuizResultScreen() {
   const rankAnim = useRef(new Animated.Value(0)).current;
   const badgeScale = useRef(new Animated.Value(0)).current;
 
-  // Simulate rank calculation
+  // Rank/results are already set by completeQuiz() via the API response
   useEffect(() => {
-    const simulatedTotalPlayers = 312;
-    const simulatedRank = Math.max(1, Math.floor(Math.random() * simulatedTotalPlayers * (1 - correctCount / 5)));
-    const duelPts = correctCount * 50 + (totalScore > 8000 ? 200 : 0);
+    // If API gave us real rank, use it — otherwise calculate percentile from what we have
+    const duelPts = duelPointsEarned || (correctCount * 50 + (totalScore > 8000 ? 200 : 0));
 
-    setResults(simulatedRank, simulatedTotalPlayers, duelPts);
+    // Credit winnings locally (backend already updated DB)
+    if (duelPts > 0) creditDuelPoints(duelPts, 'Quiz completed');
 
-    // Credit winnings
-    if (duelPts > 0) creditDuelPoints(duelPts);
-
-    // Update streak
+    // Sync user object from backend (streak + points already updated by API)
+    // We update local cache to reflect server state
     const newStreak = (user?.streakCount || 0) + 1;
-    updateUser({ 
-      streakCount: newStreak, 
+    updateUser({
+      streakCount: newStreak,
       lastPlayedAt: new Date().toISOString(),
       totalPoints: (user?.totalPoints || 0) + totalScore,
     });
@@ -52,7 +50,6 @@ export default function QuizResultScreen() {
       useNativeDriver: false,
     }).start();
 
-    // Listen to animated value for display
     const listener = scoreAnim.addListener(({ value }) => {
       setDisplayedScore(Math.round(value));
     });
@@ -61,17 +58,10 @@ export default function QuizResultScreen() {
     const rankTimer = setTimeout(() => {
       setPhase('rank');
       Animated.spring(rankAnim, {
-        toValue: 1,
-        tension: 60,
-        friction: 8,
-        useNativeDriver: true,
+        toValue: 1, tension: 60, friction: 8, useNativeDriver: true,
       }).start();
       Animated.spring(badgeScale, {
-        toValue: 1,
-        tension: 100,
-        friction: 6,
-        useNativeDriver: true,
-        delay: 300,
+        toValue: 1, tension: 100, friction: 6, useNativeDriver: true, delay: 300,
       }).start();
     }, 2500);
 

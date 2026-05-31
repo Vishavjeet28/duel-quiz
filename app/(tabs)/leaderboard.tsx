@@ -28,13 +28,20 @@ export default function LeaderboardScreen() {
   const [showFriends, setShowFriends] = useState(false);
   const [leaderboardData, setLeaderboardData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [myRank, setMyRank] = useState<{ rank: number | null; score: number; hasPlayed: boolean; totalPlayers: number }>(
+    { rank: null, score: 0, hasPlayed: false, totalPlayers: 0 }
+  );
 
   useEffect(() => {
     const fetchLeaderboard = async () => {
       try {
         setLoading(true);
-        const data = await api.get<any[]>('/v1/leaderboard/daily');
+        const [data, rankData] = await Promise.all([
+          api.get<any[]>('/v1/leaderboard/daily'),
+          api.get<any>('/v1/leaderboard/my-rank').catch(() => ({ rank: null, score: 0, hasPlayed: false, totalPlayers: 0 })),
+        ]);
         setLeaderboardData(data);
+        setMyRank(rankData);
       } catch (e) {
         console.error('Failed to fetch leaderboard:', e);
         setLeaderboardData(MOCK_LEADERBOARD); // fallback
@@ -42,11 +49,12 @@ export default function LeaderboardScreen() {
         setLoading(false);
       }
     };
-    
+
     if (activeTab === 'daily') {
       fetchLeaderboard();
     } else {
       setLeaderboardData(MOCK_LEADERBOARD);
+      setLoading(false);
     }
   }, [activeTab]);
 
@@ -150,11 +158,13 @@ export default function LeaderboardScreen() {
 
       {/* Your rank sticky footer */}
       <View style={styles.yourRank}>
-        <Text style={styles.yourRankLabel}>Your Rank</Text>
+        <Text style={styles.yourRankLabel}>Your Rank Today</Text>
         <View style={styles.yourRankRow}>
           <Text style={styles.yourRankAvatar}>{user?.avatarEmoji || '🦁'}</Text>
           <Text style={styles.yourRankName}>{user?.username || 'You'}</Text>
-          <Text style={styles.yourRankNumber}>#{userRank}</Text>
+          <Text style={styles.yourRankNumber}>
+            {myRank.hasPlayed ? `#${myRank.rank}` : 'Not played'}
+          </Text>
         </View>
       </View>
     </View>

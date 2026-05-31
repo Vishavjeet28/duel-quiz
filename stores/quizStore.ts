@@ -1,5 +1,6 @@
-// Quiz Store — Manages quiz game state
+// Quiz Store — Manages quiz game state with proper persistence
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { calculateQuestionScore, calculateQuizScore, type QuestionAnswer, type ScoreResult } from '../utils/gameLogic';
 import { api } from '../services/api';
 
@@ -32,11 +33,11 @@ interface QuizState {
   answers: QuizAnswer[];
   isQuizActive: boolean;
   isQuizComplete: boolean;
-  
+
   // Timer
   timeRemaining: number;
   timerStartedAt: number | null;
-  
+
   // Results
   totalScore: number;
   correctCount: number;
@@ -44,11 +45,12 @@ interface QuizState {
   rank: number | null;
   totalPlayers: number;
   duelPointsEarned: number;
-  
-  // Today's quiz
+
+  // Today's quiz — persisted by date
   hasPlayedToday: boolean;
   todayCategory: string;
-  
+  todayRealPlayerCount: number;
+
   // Actions
   startQuiz: (questions: Question[]) => void;
   answerQuestion: (answerChosen: string, timeTakenMs: number, isCorrect: boolean, correctOption: string, explanation: string) => void;
@@ -59,6 +61,14 @@ interface QuizState {
   resetQuiz: () => void;
   setHasPlayedToday: (val: boolean) => void;
   setTodayCategory: (cat: string) => void;
+  setRealPlayerCount: (count: number) => void;
+  checkAndLoadPlayedToday: () => Promise<void>;
+}
+
+// Returns today's date string YYYY-MM-DD in local time
+function getTodayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export const useQuizStore = create<QuizState>((set, get) => ({
@@ -77,6 +87,7 @@ export const useQuizStore = create<QuizState>((set, get) => ({
   duelPointsEarned: 0,
   hasPlayedToday: false,
   todayCategory: '',
+  todayRealPlayerCount: 0,
 
   startQuiz: (questions) => set({
     questions,
@@ -96,7 +107,7 @@ export const useQuizStore = create<QuizState>((set, get) => ({
   answerQuestion: (answerChosen, timeTakenMs, isCorrect, correctOption, explanation) => {
     const state = get();
     const question = state.questions[state.currentQuestionIndex];
-    
+
     // Calculate consecutive correct for streak bonus
     let consecutiveCorrect = 0;
     if (isCorrect) {
@@ -108,7 +119,7 @@ export const useQuizStore = create<QuizState>((set, get) => ({
     }
 
     const score = calculateQuestionScore(isCorrect, timeTakenMs, consecutiveCorrect);
-    
+
     const answer: QuizAnswer = {
       questionId: question.id,
       answerChosen,
@@ -117,7 +128,7 @@ export const useQuizStore = create<QuizState>((set, get) => ({
       score,
     };
 
-    // Update question with correct answer for display
+    // Update question with correct answer and explanation for display
     const updatedQuestions = [...state.questions];
     updatedQuestions[state.currentQuestionIndex] = {
       ...question,
@@ -137,7 +148,7 @@ export const useQuizStore = create<QuizState>((set, get) => ({
     const state = get();
     const question = state.questions[state.currentQuestionIndex];
     const score = calculateQuestionScore(false, 60000, 0);
-    
+
     set({
       answers: [...state.answers, {
         questionId: question.id,
@@ -164,33 +175,40 @@ export const useQuizStore = create<QuizState>((set, get) => ({
 
   completeQuiz: async () => {
     const state = get();
-    
+
     try {
       const payload = {
         answers: state.answers.map(a => ({
           questionId: a.questionId,
           answer: a.answerChosen,
-          timeTakenMs: a.timeTakenMs
+          timeTakenMs: a.timeTakenMs,
         })),
-        entryTier: 'free'
+        entryTier: 'free',
       };
-      
+
       const result = await api.post<any>('/v1/quiz/submit', payload);
-      
+
+      // Calculate avg time
+      const totalTime = state.answers.reduce((s, a) => s + a.timeTakenMs, 0);
+      const avgTimeTakenMs = state.answers.length > 0 ? Math.round(totalTime / state.answers.length) : 0;
+
+      // Persist played today with date key so it resets at midnight
+      await AsyncStorage.setItem('hasPlayedDate', getTodayKey());
+
       set({
         isQuizActive: false,
         isQuizComplete: true,
         totalScore: result.totalScore,
         correctCount: result.correctCount,
+        avgTimeTakenMs,
         rank: result.rank,
         totalPlayers: result.totalPlayers,
         duelPointsEarned: result.duelPoints,
         hasPlayedToday: true,
       });
     } catch (e) {
-      console.error("Failed to submit quiz", e);
-      // Fallback in case of network error, calculate locally
-      const { calculateQuizScore } = require('../utils/gameLogic');
+      console.error('Failed to submit quiz:', e);
+      // Fallback: calculate locally
       const quizResult = calculateQuizScore(state.answers.map(a => ({
         questionId: a.questionId,
         answerChosen: a.answerChosen,
@@ -198,12 +216,17 @@ export const useQuizStore = create<QuizState>((set, get) => ({
         timeTakenMs: a.timeTakenMs,
       })));
 
+      await AsyncStorage.setItem('hasPlayedDate', getTodayKey());
+
       set({
         isQuizActive: false,
         isQuizComplete: true,
         totalScore: quizResult.totalScore,
         correctCount: quizResult.correctCount,
         avgTimeTakenMs: quizResult.avgTimeTakenMs,
+        rank: null,
+        totalPlayers: 0,
+        duelPointsEarned: quizResult.correctCount * 50,
         hasPlayedToday: true,
       });
     }
@@ -233,4 +256,16 @@ export const useQuizStore = create<QuizState>((set, get) => ({
 
   setHasPlayedToday: (val) => set({ hasPlayedToday: val }),
   setTodayCategory: (cat) => set({ todayCategory: cat }),
+  setRealPlayerCount: (count) => set({ todayRealPlayerCount: count }),
+
+  // Call this on app load — checks AsyncStorage to see if user already played today
+  checkAndLoadPlayedToday: async () => {
+    try {
+      const storedDate = await AsyncStorage.getItem('hasPlayedDate');
+      const todayKey = getTodayKey();
+      set({ hasPlayedToday: storedDate === todayKey });
+    } catch {
+      set({ hasPlayedToday: false });
+    }
+  },
 }));

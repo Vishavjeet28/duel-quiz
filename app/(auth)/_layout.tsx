@@ -9,8 +9,7 @@ export default function AuthLayout() {
       animation: 'slide_from_right',
     }}>
       <Stack.Screen name="welcome" />
-      <Stack.Screen name="index" />
-      <Stack.Screen name="verify" />
+      <Stack.Screen name="social-login" />
       <Stack.Screen name="profile-setup" />
     </Stack>
   );
